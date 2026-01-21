@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 
 void main() {
   runApp(const MyApp());
 }
+
+// ================= GLOBAL DATA (REAL-TIME STORAGE) =================
+// Shuru mein list khali rahegi (0 Students)
+List<Map<String, dynamic>> globalStudents = [];
+
+// Har student ki monthly fee (Calculation ke liye)
+const double monthlyFee = 1000.0; 
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -17,7 +23,6 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF5F5F5),
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF00695C)),
         useMaterial3: true,
-        fontFamily: 'Arial',
       ),
       home: const SplashScreen(),
     );
@@ -31,43 +36,26 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
-  double _progressValue = 0.0;
-  late AnimationController _controller;
-
+class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 3))
-      ..addListener(() {
-        setState(() { _progressValue = _controller.value; });
-      });
-    _controller.forward();
-    Timer(const Duration(seconds: 4), () {
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const OnboardingScreen()));
+    Future.delayed(const Duration(seconds: 2), () {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const LoginScreen()));
     });
   }
 
   @override
-  void dispose() { _controller.dispose(); super.dispose(); }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF00695C),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.school, size: 80, color: Color(0xFF00695C)), // Placeholder for Logo
+            const Icon(Icons.school, size: 80, color: Colors.white),
             const SizedBox(height: 20),
-            const Text('ClassMaster', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 50),
-            SizedBox(
-              width: 200,
-              child: LinearProgressIndicator(value: _progressValue, color: Colors.red),
-            ),
-            const SizedBox(height: 10),
-            const Text('INITIALIZING...'),
+            const Text('ClassMaster', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.white)),
           ],
         ),
       ),
@@ -75,37 +63,306 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 }
 
-// ================= 2. ONBOARDING SCREEN =================
-class OnboardingScreen extends StatelessWidget {
-  const OnboardingScreen({super.key});
+// ================= 2. LOGIN SCREEN =================
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController nameController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            children: [
-              Align(alignment: Alignment.topRight, child: TextButton(onPressed: () => _goToLogin(context), child: const Text('SKIP'))),
-              const Spacer(),
-              const Icon(Icons.sentiment_satisfied_alt, size: 150, color: Colors.teal), // Placeholder for Image
-              const SizedBox(height: 40),
-              const Text('Save Hours Every Week', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              const Text('Create professional exam papers and manage student fees easily.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () => _goToLogin(context),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00695C)),
-                  child: const Text('Next', style: TextStyle(color: Colors.white)),
-                ),
+      backgroundColor: Colors.white,
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.account_circle, size: 60, color: Color(0xFF00695C)),
+            const SizedBox(height: 20),
+            const Text('Teacher Login', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 30),
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Enter Your Name', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (nameController.text.isNotEmpty) {
+                    Navigator.pushReplacement(
+                      context, 
+                      MaterialPageRoute(builder: (context) => DashboardScreen(teacherName: nameController.text))
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00695C)),
+                child: const Text('Login', style: TextStyle(color: Colors.white)),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================= 3. DASHBOARD (REAL-TIME UPDATES) =================
+class DashboardScreen extends StatefulWidget {
+  final String teacherName;
+  const DashboardScreen({super.key, required this.teacherName});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  int _selectedIndex = 0;
+  
+  // Real-time calculation helpers
+  int get totalStudents => globalStudents.length;
+  
+  double get totalPendingFees {
+    // Count students who are 'Unpaid'
+    int unpaidCount = globalStudents.where((s) => s['status'] == 'Pending').length;
+    return unpaidCount * monthlyFee;
+  }
+
+  void _refresh() {
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget currentScreen = _buildHomeContent();
+    if (_selectedIndex == 1) currentScreen = StudentListScreen(onUpdate: _refresh);
+    if (_selectedIndex == 2) currentScreen = const ResourceLockerScreen();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFFAFAFA),
+      appBar: _selectedIndex == 0 
+        ? AppBar(
+            title: Text('Hi, ${widget.teacherName}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.white,
+            elevation: 0,
+            actions: [
+              // Admin Panel hatakar bas chota Settings icon diya hai
+              IconButton(icon: const Icon(Icons.settings, color: Colors.grey), onPressed: (){
+                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings are restricted')));
+              })
+            ],
+          )
+        : null,
+      body: currentScreen,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        selectedItemColor: const Color(0xFF00695C),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Students'),
+          BottomNavigationBarItem(icon: Icon(Icons.folder), label: 'Library'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _buildStatCard('TOTAL STUDENTS', '$totalStudents', Colors.blue)),
+              const SizedBox(width: 16),
+              // Shows dynamically calculated fees
+              Expanded(child: _buildStatCard('PENDING FEES', '₹${totalPendingFees.toStringAsFixed(0)}', Colors.orange)),
             ],
           ),
+          const SizedBox(height: 30),
+          const Text('QUICK ACTIONS', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+               _buildActionBtn('Add Student', Icons.person_add, () {
+                 setState(() => _selectedIndex = 1); // Go to student list
+               }),
+               _buildActionBtn('Create Exam', Icons.description, () {}),
+               _buildActionBtn('Collect Fee', Icons.currency_rupee, () {}),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), 
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.grey.shade100, blurRadius: 10)]
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 4),
+          Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionBtn(String label, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+        child: Column(children: [Icon(icon, color: const Color(0xFF00695C)), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 12))]),
+      ),
+    );
+  }
+}
+
+// ================= 4. STUDENT LIST (WORKING BUTTONS) =================
+class StudentListScreen extends StatefulWidget {
+  final VoidCallback onUpdate; // Parent ko batane ke liye
+  const StudentListScreen({super.key, required this.onUpdate});
+
+  @override
+  State<StudentListScreen> createState() => _StudentListScreenState();
+}
+
+class _StudentListScreenState extends State<StudentListScreen> {
+  final TextEditingController _nameCtrl = TextEditingController();
+
+  // Function to Add Student
+  void _addStudent() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Student'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: 'Student Name')),
+            const SizedBox(height: 10),
+            const Text('Default Fee Status: Pending (₹1000)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              if (_nameCtrl.text.isNotEmpty) {
+                setState(() {
+                  globalStudents.add({
+                    'name': _nameCtrl.text,
+                    'status': 'Pending', // By default Pending
+                    'color': Colors.red
+                  });
+                });
+                _nameCtrl.clear();
+                widget.onUpdate(); // Update Dashboard stats
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Add Student'),
+          )
+        ],
+      ),
+    );
+  }
+
+  // Toggle Fee Status (Pending <-> Paid)
+  void _toggleFeeStatus(int index) {
+    setState(() {
+      if (globalStudents[index]['status'] == 'Pending') {
+        globalStudents[index]['status'] = 'Paid';
+        globalStudents[index]['color'] = Colors.green;
+      } else {
+        globalStudents[index]['status'] = 'Pending';
+        globalStudents[index]['color'] = Colors.red;
+      }
+    });
+    widget.onUpdate(); // Update Dashboard stats
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: globalStudents.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.people_outline, size: 60, color: Colors.grey.shade300),
+                  const SizedBox(height: 16),
+                  const Text('No students yet', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 8),
+                  const Text('Click + to add your first student', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: globalStudents.length,
+              itemBuilder: (context, index) {
+                final student = globalStudents[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: CircleAvatar(child: Text(student['name'][0])),
+                    title: Text(student['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: Text('Tap button to change status'),
+                    trailing: InkWell(
+                      onTap: () => _toggleFeeStatus(index),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: student['color'].withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: student['color'])
+                        ),
+                        child: Text(
+                          student['status'],
+                          style: TextStyle(color: student['color'], fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addStudent,
+        label: const Text('Add Student', style: TextStyle(color: Colors.white)),
+        icon: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: const Color(0xFF00695C),
+      ),
+    );
+  }
+}
+
+class ResourceLockerScreen extends StatelessWidget {
+  const ResourceLockerScreen({super.key});
+  @override
+  Widget build(BuildContext context) => const Center(child: Text('Library Empty'));
+}
         ),
       ),
     );
